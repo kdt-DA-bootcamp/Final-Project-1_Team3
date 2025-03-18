@@ -6,7 +6,7 @@ import requests
 import json
 import csv
 
-API_KEY = "AIzaSyCVSFqv9eMFoQWrWEwOTt5RVS20iBCNMSM"
+API_KEY = ""
 
 BASE_URL = "https://www.googleapis.com/youtube/v3/"
 
