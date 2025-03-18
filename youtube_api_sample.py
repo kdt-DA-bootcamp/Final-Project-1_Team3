@@ -6,7 +6,7 @@ import requests
 import json
 import csv
 
-API_KEY = ""
+API_KEY = "api키를 입력하세요"
 
 BASE_URL = "https://www.googleapis.com/youtube/v3/"
 
