@@ -50,14 +50,25 @@ def convert_duration_to_seconds(duration):
     except:
         return 0
 
-# 한국에서 제공하는 카테고리 ID 리스트
-categories = {1: "Film & Animation", 2: "Autos & Vehicles", 10: "Music", 15: "Pets & Animals",
-         17: "Sports", 18: "Short Movies", 19: "Travel & Events", 20: "Gaming", 21: "Videoblogging",
-         22: "People & Blogs", 23: "Comedy", 24: "Entertainment", 25: "News & Politics",
-         26: "Howto & Style", 27: "Education", 28: "Science & Technology", 30: "Movies",
-         31: "Anime/Animation", 32: "Action/Adventure", 33: "Classics", 34: "Comedy", 35: "Documentary",
-         36: "Drama", 37: "Family", 38: "Foreign", 39: "Horror", 40: "Sci-Fi/Fantasy", 41: "Thriller",
-         42: "Shorts", 43: "Shows", 44: "Trailers"}
+# 쇼츠 전용 채널 확인
+def is_shorts_channel(channel_id):
+    channel_info = get_channel_info(channel_id)
+    if "items" in channel_info and len(channel_info["items"]) > 0:
+        channel_title = channel_info["items"][0]["snippet"]["title"]
+        return "Shorts" in channel_title  # 채널명에 'Shorts' 포함 여부 확인
+    return False
+
+# 쇼츠 필터링 키워드
+SHORTS_KEYWORDS = ["#Shorts", "#shorts", "#쇼츠", "#shortsvideo"]
+
+
+# 한국에서 사용하는 카테고리 ID 목록
+categories = {
+    1: "Film & Animation", 2: "Autos & Vehicles", 10: "Music", 15: "Pets & Animals",
+    17: "Sports", 18: "Short Movies", 19: "Travel & Events", 20: "Gaming", 21: "Videoblogging",
+    22: "People & Blogs", 23: "Comedy", 24: "Entertainment", 25: "News & Politics",
+    26: "Howto & Style", 27: "Education", 28: "Science & Technology"
+}
 
 
 # 카테고리별 인기 영상 가져오기
@@ -67,6 +78,7 @@ def get_popular_videos(category_id):
         "part": "snippet,statistics,contentDetails",
         "chart": "mostPopular",
         "regionCode": "KR",
+        "relevanceLanguage": "ko",
         "videoCategoryId": category_id,
         "maxResults": 50,
         "key": API_KEY,
@@ -91,8 +103,8 @@ video_data = []
 channel_data = {}
 
 # 카테고리별 인기 영상 정보 수집
-for category_id in categories.keys():
-    print(f"📌 카테고리 ID {category_id} ({categories[category_id]})의 인기 영상 가져오는 중...")
+for category_id, category_name in categories.items():
+    print(f"📌 카테고리 ID {category_id} ({category_name})의 인기 영상 가져오는 중...")
 
     videos = get_popular_videos(category_id)
     
@@ -118,12 +130,14 @@ for category_id in categories.keys():
         comment_count = statistics.get("commentCount", "0")
         duration = convert_duration_to_seconds(content_details.get("duration", "PT0S"))
 
-        # 영상 정보 저장
-        video_data.append([
-            video_id, category_id, channel_id, title,
-            view_count, like_count, comment_count, upload_date, duration, 
-            tags, thumbnail_url
-        ])
+        # 쇼츠 영상 & 쇼츠 전용 채널 제외
+        is_shorts = any(keyword in title or keyword in description for keyword in SHORTS_KEYWORDS)
+        if duration > 60 and not is_shorts and not is_shorts_channel(channel_id):
+            video_data.append([
+                video_id, category_id, category_name, channel_id, title,
+                view_count, like_count, comment_count, upload_date, duration, 
+                ",".join(tags), thumbnail_url
+            ])
 
         # 채널 정보가 없으면 가져오기
         if channel_id not in channel_data:
@@ -141,10 +155,14 @@ for category_id in categories.keys():
                 # 채널 정보 저장
                 channel_data[channel_id] = [channel_id, channel_name, subscriber_count, total_views, video_count]
 
+# **테스트: 데이터 개수 확인**
+if len(video_data) > 0:
+    print(f"✅ 수집된 데이터 개수: {len(video_data)}개")
+    print(f"✅ 첫 번째 데이터 컬럼 개수: {len(video_data[0])}개 (데이터 컬럼 수 확인 필요)")
 
 # 데이터프레임 생성 및 CSV 저장
 video_df = pd.DataFrame(video_data, columns=[
-    "videoID", "categoryID", "channelID", "title",
+    "videoID", "categoryID", "categoryName", "channelID", "title",
     "viewCount", "likeCount", "commentCount", "updateDate", "duration",
     "tags", "thumbnailURL"
 ])
