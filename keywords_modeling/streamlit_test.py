@@ -5,13 +5,17 @@ from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 import platform
 
-# 한글 폰트 설정 (Windows와 Mac에 따라 설정 다름)
+# 한글 폰트 설정
 if platform.system() == "Windows":
     font_path = "C:/Windows/Fonts/malgun.ttf"
-elif platform.system() == "Darwin":  # macOS
-    font_path = "/Library/Fonts/AppleGothic.ttf"
 else:
     font_path = None
+
+# 카테고리 매핑
+category_map = {
+    1: '엔터테인먼트', 2: '차량', 3: '여행&음식', 4: '게임', 5: '스포츠',
+    6: '라이프', 7: '정치', 8: '반려동물', 9: '교육', 10: '과학/기술'
+}
 
 # 결과 불러오기
 @st.cache_data
@@ -25,15 +29,19 @@ def load_results():
 
 results = load_results()
 
-st.title("반짝 영상 키워드 분석")
+st.title("카테고리별 반짝 영상 키워드 분석")
 st.markdown("""
-대형 채널이 아님에도 예상 조회수를 뛰어넘은 반짝 영상들을 분석하여 키워드를 추출했습니다.  
+대형 채널이 아님에도 예상 조회수를 뛰어넘은 반짝 영상들을 카테고리별로 분석하여 키워드를 추출했습니다.  
 많이 등장한 키워드를 **워드 클라우드**로 시각화하여 한눈에 확인할 수 있습니다.
 """)
 
+# --- 카테고리 선택 ---
+categories = list(category_map.keys())
+selected_category = st.selectbox("카테고리 선택", categories, format_func=lambda x: category_map[x])
+
 # --- BERTopic 키워드 표시 ---
-if 'bertopic_keywords' in results:
-    bert_df = pd.DataFrame(results['bertopic_keywords'])
+if selected_category in results:
+    bert_df = pd.DataFrame(results[selected_category]['bertopic_keywords'])
     if not bert_df.empty and 'keyword' in bert_df.columns and 'score' in bert_df.columns:
         bert_df['score'] = (bert_df['score'] / bert_df['score'].max() * 100).round(2)  # 정규화
         top_bert = bert_df.sort_values(by='score', ascending=False).head(15)
@@ -62,16 +70,16 @@ if 'bertopic_keywords' in results:
         st.pyplot(fig)
 
     else:
-        st.warning("BERTopic 키워드 분석 결과는 있지만 컬럼이 누락되었습니다.")
+        st.warning(f"카테고리 '{category_map[selected_category]}'에 대한 BERTopic 키워드 분석 결과는 있지만 컬럼이 누락되었습니다.")
 else:
-    st.warning("BERTopic 키워드 분석 결과가 포함되어 있지 않습니다.")
+    st.warning(f"카테고리 '{category_map[selected_category]}'에 대한 BERTopic 키워드 분석 결과가 포함되어 있지 않습니다.")
 
 # --- 이상치 영상 목록 ---
 st.markdown("---")
-st.subheader("예측보다 높은 조회수를 기록한 영상들")
+st.subheader(f"예측보다 높은 조회수를 기록한 영상들 ({category_map[selected_category]})")
 
-if 'outliers' in results:
-    outlier_df = pd.DataFrame(results['outliers'])
+if selected_category in results:
+    outlier_df = pd.DataFrame(results[selected_category]['outliers'])
     if not outlier_df.empty:
         outlier_df = outlier_df.sort_values(by='gap', ascending=False)
 
@@ -94,7 +102,7 @@ if 'outliers' in results:
                 image_html = f'<a href="{video_url}" target="_blank"><img src="{thumbnail_url}" width="300"></a>'
             else:
                 image_html = "썸네일 없음"
-            
+
             # Streamlit에 표시
             st.markdown(f"""
             - **{row['title']}**  
@@ -102,6 +110,6 @@ if 'outliers' in results:
             """)
             st.markdown(image_html, unsafe_allow_html=True)
     else:
-        st.info("이상치 영상이 없습니다.")
+        st.info(f"카테고리 '{category_map[selected_category]}'에 대한 이상치 영상이 없습니다.")
 else:
-    st.error("분석된 이상치 영상 데이터가 없습니다.")
+    st.error(f"카테고리 '{category_map[selected_category]}'에 대한 분석된 이상치 영상 데이터가 없습니다.")

@@ -1,5 +1,4 @@
 import os
-import ast
 import pickle
 import pandas as pd
 import numpy as np
@@ -11,7 +10,6 @@ from sklearn.model_selection import train_test_split
 from bertopic import BERTopic
 from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
-from collections import Counter
 
 load_dotenv()
 
@@ -42,8 +40,6 @@ def train_model(df):
 def predict_gap(model, df):
     df = df.copy()
     df['videosCount'] = df.groupby('channelID')['videoID'].transform('count')
-    df['duration'] = 300
-    df['categoryID'] = 0
     features = ['subscriberCount', 'videosCount', 'duration', 'likeCount', 'commentCount', 'categoryID']
     X = df[features].fillna(0)
     df['predicted_viewCount'] = np.expm1(model.predict(X))
@@ -78,21 +74,6 @@ def bertopic_keywords(texts):
             keywords.extend([{'keyword': word, 'score': round(weight * 100, 2)} for word, weight in words])
     return keywords
 
-# ------------------- 교차 키워드 계산 -------------------
-def calculate_intersection(tfidf, bert):
-    tfidf_set = set([k['keyword'] for k in tfidf])
-    bert_set = set([k['keyword'] for k in bert])
-    intersection = tfidf_set.intersection(bert_set)
-    
-    # 가중치 추가
-    intersection_keywords = []
-    for keyword in intersection:
-        tfidf_score = next((item['score'] for item in tfidf if item['keyword'] == keyword), 0)
-        bert_score = next((item['score'] for item in bert if item['keyword'] == keyword), 0)
-        combined_score = tfidf_score * 0.5 + bert_score * 0.5  # 가중 평균
-        intersection_keywords.append({'keyword': keyword, 'score': round(combined_score, 4)})
-    return intersection_keywords
-
 # ------------------- 전체 분석 -------------------
 def analyze():
     df = load_data()
@@ -103,23 +84,50 @@ def analyze():
     high = df['subscriberCount'].quantile(0.7)
     df = df[(df['subscriberCount'] > low) & (df['subscriberCount'] <= high)]
 
+    print(f"중형 채널 필터링 후 데이터 개수: {len(df)}")
+
     df = predict_gap(model, df)
-    filtered = df[(df['gap'] > df['gap'].quantile(0.9)) & (df['gap_ratio'] >= 2)]
+    
+    # categoryID 타입 변환 및 확인
+    if 'categoryID' in df.columns:
+        df['categoryID'] = df['categoryID'].astype(int)
+        print(f"카테고리 ID 유형: {df['categoryID'].dtype}")
+        print(f"카테고리 ID 고유값: {df['categoryID'].unique()}")
 
-    # 텍스트 병합
-    texts = filtered['title'].apply(clean_text).tolist()
+    results = {}
 
-    # 키워드 분석
-    tfidf_result = tfidf_keywords(texts)
-    bert_result = bertopic_keywords(texts)
-    intersection_result = calculate_intersection(tfidf_result, bert_result)
+    # 카테고리별 분석
+    for category_id in sorted(df['categoryID'].unique()):
+        # categoryID 필터링
+        category_df = df[df['categoryID'] == category_id]
+        
+        # 중형 채널 필터링 후 카테고리별 데이터 개수 확인
+        print(f"카테고리 {category_id}: 데이터 개수 {len(category_df)}")
 
-    results = {
-        'outliers': filtered[['videoID', 'channelID', 'title', 'gap', 'uploadDate', 'subscriberCount', 'channelTitle']].to_dict(orient='records'),
-        'tfidf_keywords': tfidf_result,
-        'bertopic_keywords': bert_result,
-        'intersection_keywords': intersection_result
-    }
+        # 카테고리별 데이터가 있는지 확인
+        if category_df.empty:
+            print(f"카테고리 {category_id}: 데이터 없음")
+            continue
+        
+        # 이상치 필터링 조건 완화: gap_ratio를 2에서 1.5로 조정
+        filtered = category_df[(category_df['gap'] > category_df['gap'].quantile(0.9)) & (category_df['gap_ratio'] >= 1.5)]
+
+        # 이상치 데이터가 없는 경우 로그로 표시
+        if filtered.empty:
+            print(f"카테고리 {category_id}: 이상치 없음")
+            continue
+        
+        print(f"카테고리 {category_id}: 이상치 {len(filtered)}개")
+
+        texts = filtered['title'].apply(clean_text).tolist()
+        tfidf_result = tfidf_keywords(texts)
+        bert_result = bertopic_keywords(texts)
+
+        results[category_id] = {
+            'outliers': filtered[['videoID', 'channelID', 'title', 'gap', 'uploadDate', 'subscriberCount', 'channelTitle']].to_dict(orient='records'),
+            'tfidf_keywords': tfidf_result,
+            'bertopic_keywords': bert_result
+        }
     return results
 
 # ------------------- 저장 -------------------
