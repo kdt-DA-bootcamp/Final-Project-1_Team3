@@ -1,5 +1,7 @@
 import platform
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+import os
 import matplotlib
 
 def get_font_path():
@@ -12,12 +14,17 @@ def get_font_path():
         return "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"
 
 def set_korean_font():
-    """Matplotlib 한글 폰트 설정 (Windows: Malgun Gothic, macOS: AppleGothic, Linux: NanumGothic)"""
-    if platform.system() == "Windows":
+    if platform.system() == "Linux":
+        font_path = os.path.join(os.path.dirname(__file__), 'fonts', 'NanumGothic.ttf')
+        if os.path.exists(font_path):
+            font_prop = fm.FontProperties(fname=font_path)
+            plt.rcParams['font.family'] = font_prop.get_name()
+            print("✅ NanumGothic 로컬 로딩 완료:", font_prop.get_name())
+        else:
+            print("❌ NanumGothic.ttf 경로를 찾을 수 없음")
+    elif platform.system() == "Windows":
         plt.rc('font', family='Malgun Gothic')
     elif platform.system() == "Darwin":
         plt.rc('font', family='AppleGothic')
-    else:
-        plt.rc('font', family='NanumGothic')
 
-    matplotlib.rcParams['axes.unicode_minus'] = False
+    plt.rcParams['axes.unicode_minus'] = False

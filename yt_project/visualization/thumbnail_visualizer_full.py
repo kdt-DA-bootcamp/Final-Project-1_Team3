@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 from matplotlib.colors import CSS4_COLORS, to_rgb
 import pickle
+import streamlit as st
 
 # 색상 이름 변환 함수
 def get_color_name(hex_code):
@@ -280,11 +281,6 @@ def display_graph_and_text(group_name, color_names, ratios, hex_colors, mode):
 
 
 # ☆☆ 아래부터 썸네일 추천 기능 코드 ☆☆
-import pickle
-import pandas as pd
-import streamlit as st
-import matplotlib.pyplot as plt
-
 def load_data(imc_path: str, refined_path: str):
     """
     이미지 키워드 추천 데이터와 썸네일 문구 추천 데이터를 로드합니다.
