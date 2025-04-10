@@ -11,7 +11,7 @@ set_korean_font()
 # 데이터 로드 함수
 def load_success_videos():
     try:
-        df = pd.read_csv("../data/underdog_results_all.csv", encoding="utf-8-sig")
+        df = pd.read_csv("./data/underdog_results_all.csv", encoding="utf-8-sig")
         st.write("CSV 컬럼 리스트:", df.columns.tolist())
 
         if 'categoryID' not in df.columns:

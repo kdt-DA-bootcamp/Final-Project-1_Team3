@@ -101,7 +101,7 @@ def deserialize_colors(color_dict):
 @st.cache_data
 def load_color_data():
     try:
-        color_analysis_df = pd.read_csv("../data/color_analysis_views.csv")
+        color_analysis_df = pd.read_csv("./data/color_analysis_views.csv")
 
         # 컬러 데이터를 파싱하여 딕셔너리로 변환
         color_analysis_df['high_view_colors'] = color_analysis_df['high_view_colors'].apply(parse_color_distribution)
@@ -350,8 +350,8 @@ def display_thumbnail_recommendations(selected_category=None):
 
     # 데이터 경로
     # CSV 파일로 저장된 경우 경로를 CSV 파일로 지정합니다.
-    imc_path = '../data/translated_category_recommendations_0409.csv'
-    refined_path = '../data/refined_recommendations_0409.csv'
+    imc_path = './data/translated_category_recommendations_0409.csv'
+    refined_path = './data/refined_recommendations_0409.csv'
 
     # 데이터 로드
     df_IMC, df_refined = load_data(imc_path, refined_path)

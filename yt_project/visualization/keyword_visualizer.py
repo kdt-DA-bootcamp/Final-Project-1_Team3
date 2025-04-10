@@ -9,7 +9,7 @@ from ast import literal_eval
 from math import log1p
 
 # 데이터 로드 함수
-def load_keyword_analysis(filename="../data/keyword_analysis.csv"):
+def load_keyword_analysis(filename="./data/keyword_analysis.csv"):
     try:
         df = pd.read_csv(filename)
 

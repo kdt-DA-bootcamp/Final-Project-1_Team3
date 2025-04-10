@@ -357,7 +357,7 @@ def show_smart_recommendation():
 @st.cache_data
 def load_success_videos():
     try:
-        df = pd.read_csv("../data/underdog_results_all.csv", encoding="utf-8-sig")
+        df = pd.read_csv("./data/underdog_results_all.csv", encoding="utf-8-sig")
         if 'categoryID' not in df.columns:
             st.error("CSV 파일에 'categoryID' 컬럼이 없습니다.")
             return {}
