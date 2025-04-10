@@ -1,8 +1,10 @@
 import pandas as pd
 import json
+import os
 import re
 import ast
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import streamlit as st
 from matplotlib.colors import CSS4_COLORS, to_rgb
 import pickle
@@ -329,17 +331,26 @@ def get_thumbnail_texts(df_refined, group_number: int, top_n: int = 10):
         return []
 
 def plot_keyword_bar_chart(df_keywords):
+    font_path = os.path.join(os.path.dirname(__file__), "fonts", "NanumGothic.ttf")
+    font_prop = fm.FontProperties(fname=font_path)
+
     df_plot = df_keywords.sort_values("순위", ascending=False)
     n = len(df_plot)
     height_per_item = 0.15
     fig_height = max(4, n * height_per_item)
     fig, ax = plt.subplots(figsize=(6, fig_height))
+
     ax.barh(df_plot["키워드"], df_plot["point"], color="skyblue")
-    ax.set_xlabel("point")
+    ax.set_xlabel("point", fontproperties=font_prop)
 
     for i, (score, label) in enumerate(zip(df_plot["point"], df_plot["키워드"])):
-        ax.text(score + 0.005, i, f"{score:.2f}", va='center')
+        ax.text(score + 0.005, i, f"{score:.2f}", va='center', fontproperties=font_prop)
+    
+    plt.yticks(fontproperties=font_prop)
+    plt.xticks(fontproperties=font_prop)
+
     plt.tight_layout()
+
     return fig
 
 def display_thumbnail_recommendations(selected_category=None):
