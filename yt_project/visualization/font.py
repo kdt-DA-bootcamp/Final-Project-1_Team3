@@ -6,12 +6,13 @@ import matplotlib
 
 def get_font_path():
     """WordCloud용 폰트 경로 반환 (Windows: malgun.ttf, 기타: None)"""
+    base_dir = os.path.dirname(__file__)
     if platform.system() == "Windows":
         return "C:/Windows/Fonts/malgun.ttf"
     elif platform.system() == "Darwin":
         return "/System/Library/Fonts/AppleGothic.ttf"
     else:
-        return "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"
+        return os.path.join(base_dir, "fonts", "NanumGothic.ttf")
 
 def set_korean_font():
     if platform.system() == "Linux":
