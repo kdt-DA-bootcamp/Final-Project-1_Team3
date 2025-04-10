@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pickle
 import os
+import ast
 import altair as alt
 from wordcloud import WordCloud
 from keyword_visualizer import load_keyword_analysis, analyze_keywords
@@ -13,6 +14,7 @@ from thumbnail_visualizer_full import (
 from success_video_visualizer import load_success_videos, visualize_wordcloud, show_success_videos
 from font import set_korean_font, get_font_path
 from posixpath import basename
+st.set_page_config(layout="wide")
 
 # 한글 폰트 설정
 set_korean_font()
@@ -26,7 +28,6 @@ def get_logo_path():
 # Streamlit 앱 메인 함수
 def main():
     # 페이지 기본 설정
-    st.set_page_config(layout="wide")
     with st.sidebar:
         col1, col2 = st.columns([0.2, 0.8])
         with col1:
@@ -54,8 +55,9 @@ def main():
 
 # 트렌드 분석 페이지
 def show_trend_analysis():
+
     st.title("트렌드 리포트")
-    st.markdown("카테고리와 날짜 범위를 선택해 반짝 키워드와 꾸준히 상승하는 키워드를 분석하세요.")
+    st.markdown("카테고리와 날짜 범위를 선택해 키워드 언급이 급등하는 반짝 키워드와 언급이 안정적인 꾸준 키워드를 분석하세요.")
 
     df = load_keyword_analysis()
     if df.empty:
@@ -93,9 +95,14 @@ def show_trend_analysis():
         st.error("분석 결과 데이터가 비어 있습니다.")
         return
 
-    top_n = st.selectbox("몇 개의 상위 키워드를 볼까요?", [10, 20, 30, 50], index=1)
-    tabs = st.tabs(["반짝 키워드", "꾸준히 상승 키워드"])
+    total_keywords = len(result_df)
+    new_keywords = result_df[result_df['score'].astype(str).str.upper() == 'NEW']
+    st.success(f"전체 분석 키워드 수: {total_keywords}개 | 신규 키워드 수: {len(new_keywords)}개")
 
+    top_n = st.selectbox("몇 개의 상위 키워드를 볼까요?", [10, 20, 30, 50], index=1)
+    tabs = st.tabs(["반짝 키워드", "꾸준 키워드"])
+
+    # 반짝 키워드
     with tabs[0]:
         st.subheader(f"{selected_category} - 반짝 키워드 (TOP {top_n})")
         flash_df = result_df[result_df['type'] == 'flash'].copy()
@@ -116,20 +123,112 @@ def show_trend_analysis():
         st.dataframe(flash_display, use_container_width=True)
         st.download_button("반짝 키워드 CSV 다운로드", flash_df.to_csv(index=False), "flash_keywords.csv", "text/csv")
 
+        st.subheader('키워드 상세 보기')
+        for i, (idx, row) in enumerate(flash_df.iterrows()):
+            keyword = row['keyword']
+            mask = category_df['keywords'].astype(str).str.contains(keyword, case=False, na=False)
+            related_videos = category_df[mask]
+
+            top_video = related_videos.sort_values('viewCount', ascending=False).head(1)
+
+            with st.expander(f"{keyword}"):
+                st.write(f"- 점수: {row['score']}")
+                st.write(f"- 신규 여부: {'신규 키워드' if row['is_new'] else '기존 키워드'}")
+                st.write("→ 이 키워드는 최근 특정 이슈 또는 트렌드에 의해 급격히 떠오르고 있습니다.")
+                if not top_video.empty:
+                    video_row = top_video.iloc[0]
+                    video_url = f"https://www.youtube.com/watch?v={video_row['videoID']}"
+                    view_count = f"{int(video_row['viewCount']):,}"
+                    subscriber_count = f"{int(video_row['subscriberCount']):,}" if pd.notna(video_row['subscriberCount']) else "정보 없음"
+                    st.markdown(f"""
+                    **대표 영상 추천**: [{video_row['title']}]({video_url})
+                    조회수: {view_count}회  
+                    구독자 수: {subscriber_count}명
+                    """)
+                    
+                    # 추세선 그래프
+                    trend_range = st.radio("추세선 기간 선택", ["전체", "선택한 기간"], horizontal=True, key=f"steady_trend_{keyword}_{i}")
+                    if trend_range == "선택한 기간":
+                        filtered_videos = related_videos[
+                            (related_videos['uploadDate'] >= date_range[0]) &
+                            (related_videos['uploadDate'] <= date_range[1])
+                        ]
+                    else:
+                        filtered_videos = related_videos
+
+
+                    time_trend = filtered_videos.groupby('uploadDate').size().reset_index(name='count')
+                    if not time_trend.empty:
+                        line_chart = alt.Chart(time_trend).mark_line(point=True).encode(
+                            x=alt.X('uploadDate:T', title='업로드일'),
+                            y=alt.Y('count:Q', title='언급 수'), 
+                            tooltip=[
+                                alt.Tooltip('uploadDate:T', title='업로드일'), 
+                                alt.Tooltip('count:Q', title='언급 수')
+                                ]
+                        ).properties(title=f"{keyword} 언급량 추이 ({trend_range})")
+                        st.altair_chart(line_chart, use_container_width=True)
+                    else:
+                        st.info("선택한 기간 내에 해당 키워드가 언급된 영상이 없습니다.")
+                else:
+                    st.markdown("대표 영상을 찾을 수 없습니다.")
+    
+    # 꾸준 키워드
     with tabs[1]:
-        st.subheader(f"{selected_category} - 꾸준히 상승 키워드 (TOP {top_n})")
+        st.subheader(f"{selected_category} - 꾸준 키워드 (TOP {top_n})")
         steady_df = result_df[result_df['type'] == 'steady'].copy()
         steady_df['numeric_score'] = pd.to_numeric(steady_df['score'], errors='coerce')
         steady_df = steady_df.sort_values("numeric_score", ascending=False).head(top_n)
 
         if not steady_df.empty:
-            import altair as alt
             chart = alt.Chart(steady_df).mark_bar(size=20).encode(
                 x=alt.X("numeric_score:Q", title="기울기"),
                 y=alt.Y("keyword:N", sort='-x', title="키워드"),
                 tooltip=["keyword", "score"]
             ).properties(height=500)
             st.altair_chart(chart, use_container_width=True)
+
+            st.subheader('키워드 상세 보기')
+            for i, (idx, row) in enumerate(steady_df.iterrows()):
+                keyword = row['keyword']
+                with st.expander(f"{keyword}"):
+                    st.write(f"- 점수 (기울기): {row['score']}")
+                    mask = category_df['keywords'].astype(str).str.contains(keyword, case=False, na=False)
+                    related_videos = category_df[mask]
+                    top_video = related_videos.sort_values('viewCount', ascending=False).head(1)
+                    if not top_video.empty:
+                        video_row = top_video.iloc[0]
+                        video_url = f"https://www.youtube.com/watch?v={video_row['videoID']}"
+                        view_count = f"{int(video_row['viewCount']):,}"
+                        subscriber_count = f"{int(video_row['subscriberCount']):,}" if pd.notna(video_row['subscriberCount']) else "정보 없음"
+                        st.markdown(f"""
+                        **대표 영상**: [{video_row['title']}]({video_url})  
+                        조회수: {view_count}회  
+                        구독자 수: {subscriber_count}명
+                        """)
+                    else:
+                        st.markdown("대표 영상을 찾을 수 없습니다.")
+
+                    # 추세선 그래프
+                    trend_range = st.radio("추세선 기간 선택", ["전체", "선택한 기간"], horizontal=True, key=f"flash_trend_{keyword}_{i}")
+                    if trend_range == "선택한 기간":
+                        filtered_videos = related_videos[
+                            (related_videos['uploadDate'] >= date_range[0]) &
+                            (related_videos['uploadDate'] <= date_range[1])
+                        ]
+                    else:
+                        filtered_videos = related_videos
+
+                    time_trend = filtered_videos.groupby('uploadDate').size().reset_index(name='count')
+                    if not time_trend.empty:
+                        line_chart = alt.Chart(time_trend).mark_line(point=True).encode(
+                            x='uploadDate:T',
+                            y='count:Q',
+                            tooltip=['uploadDate:T', 'count']
+                        ).properties(title=f"{keyword} 언급량 추이 ({trend_range})")
+                        st.altair_chart(line_chart, use_container_width=True)
+                    else:
+                        st.info("선택한 기간 내에 해당 키워드가 언급된 영상이 없습니다.")
 
 # 스마트 추천 페이지
 def show_smart_recommendation():
@@ -140,7 +239,7 @@ def show_smart_recommendation():
         6: '라이프', 7: '정치', 8: '반려동물', 9: '교육', 10: '과학/기술'
     }
     
-    tabs = st.tabs(["썸네일 추천", "업로드 시간 추천"])
+    tabs = st.tabs(["썸네일 추천", "업로드 시간 분석"])
 
     with tabs[0]:
         st.subheader("썸네일 추천")
@@ -256,6 +355,24 @@ def show_smart_recommendation():
 
 
 # 반짝 영상 분석 페이지
+@st.cache_data
+def load_success_videos():
+    try:
+        df = pd.read_csv("../data/underdog_results_all.csv", encoding="utf-8-sig")
+        if 'categoryID' not in df.columns:
+            st.error("CSV 파일에 'categoryID' 컬럼이 없습니다.")
+            return {}
+        results = {}
+        for category, group in df.groupby('categoryID'):
+            results[str(category)] = {
+                'bertopic_keywords': group.iloc[0]['bertopic_keywords'],
+                'outliers': group.iloc[0]['outliers']
+            }
+        return results
+    except Exception as e:
+        st.error(f"파일을 불러오는 중 오류 발생: {e}")
+        return {}
+
 def show_high_impact_videos():
     st.title("반짝 영상 분석")
     st.markdown("""

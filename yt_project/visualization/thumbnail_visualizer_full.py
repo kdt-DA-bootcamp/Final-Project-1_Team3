@@ -279,37 +279,72 @@ def display_graph_and_text(group_name, color_names, ratios, hex_colors, mode):
             st.markdown(f"- **{name}**: {ratio * 100:.1f}%")
 
 
-
-
 # ☆☆ 아래부터 썸네일 추천 기능 코드 ☆☆
+import pickle
+import pandas as pd
+import streamlit as st
+import matplotlib.pyplot as plt
 
 def load_data(imc_path: str, refined_path: str):
     """
-    pickle 파일들을 로드하여 이미지 키워드 추천 데이터와 썸네일 문구 추천 데이터를 반환합니다.
+    이미지 키워드 추천 데이터와 썸네일 문구 추천 데이터를 로드합니다.
+    imc_path와 refined_path 파일이 CSV 파일이면 pandas.read_csv()를 사용하여 읽고,
+    그렇지 않으면 pickle.load()를 사용합니다.
     """
-    with open(imc_path, 'rb') as f:
-        df_IMC = pickle.load(f)
-    with open(refined_path, 'rb') as f:
-        df_refined = pickle.load(f)
+    # imc_path 파일 읽기 (CSV 파일이면 read_csv 사용)
+    if imc_path.lower().endswith('.csv'):
+        df_IMC = pd.read_csv(imc_path)
+    else:
+        with open(imc_path, 'rb') as f:
+            df_IMC = pickle.load(f)
+
+    # refined_path 파일 읽기 (CSV 파일이면 read_csv 사용)
+    if refined_path.lower().endswith('.csv'):
+        df_refined = pd.read_csv(refined_path)
+    else:
+        with open(refined_path, 'rb') as f:
+            df_refined = pickle.load(f)
+    
     return df_IMC, df_refined
 
 def get_thumbnail_keywords(df_IMC, group_number: int, top_n: int = 20):
-    if group_number in df_IMC:
-        return df_IMC[group_number][:top_n]  # (키워드, point) 튜플 리스트
+    """
+    CSV 파일로 로드한 경우 DataFrame에서 'category' 컬럼의 값이 group_number와 일치하는 행을
+    필터링하여 (키워드, point) 튜플 리스트의 상위 top_n개를 반환합니다.
+    """
+    # 만약 display_thumbnail_recommendations에서 df_IMC 컬럼명을 일치시켰다면 'category'와 'keyword'를 사용합니다.
+    filtered = df_IMC[df_IMC['category'] == group_number]
+    if not filtered.empty:
+        # (키워드, score) 튜플 리스트로 변환. 여기서 score를 point 역할로 사용
+        tuples_list = list(zip(filtered['keyword'], filtered['score']))
+        return tuples_list[:top_n]
     else:
         return []
 
 def get_thumbnail_texts(df_refined, group_number: int, top_n: int = 10):
     """
-    df_refined에서 'category' 컬럼이 group_number와 일치하는 행의 'refined_text'를 상위 top_n개 추출하여 반환합니다.
-    'category' 컬럼은 문자열 형태로 저장되어 있다고 가정합니다.
+    df_refined에서 'category' 컬럼의 값이 group_number와 일치하는 행의 'refined_text'를 상위 top_n개 추출하여 반환합니다.
+    (CSV 파일의 refined 데이터는 'category' 컬럼이 정수형으로 저장되어 있다고 가정)
     """
-    df_category = df_refined[df_refined['category'] == str(group_number)]
+    df_category = df_refined[df_refined['category'] == group_number]
     if not df_category.empty:
         return df_category['refined_text'].tolist()[:top_n]
     else:
         return []
 
+def plot_keyword_bar_chart(df_keywords):
+    df_plot = df_keywords.sort_values("순위", ascending=False)
+    n = len(df_plot)
+    height_per_item = 0.15
+    fig_height = max(4, n * height_per_item)
+    fig, ax = plt.subplots(figsize=(6, fig_height))
+    ax.barh(df_plot["키워드"], df_plot["point"], color="skyblue")
+    ax.set_xlabel("point")
+
+    for i, (score, label) in enumerate(zip(df_plot["point"], df_plot["키워드"])):
+        ax.text(score + 0.005, i, f"{score:.2f}", va='center')
+    plt.tight_layout()
+    return fig
 
 def display_thumbnail_recommendations(selected_category=None):
     """
@@ -318,23 +353,42 @@ def display_thumbnail_recommendations(selected_category=None):
     st.header("썸네일 추천")
 
     # 데이터 경로
-    imc_path = '../data/translated_category_recommendations.pkl'
-    refined_path = '../data/refined_recommendations.pkl'
+    # CSV 파일로 저장된 경우 경로를 CSV 파일로 지정합니다.
+    imc_path = '../data/translated_category_recommendations_0409.csv'
+    refined_path = '../data/refined_recommendations_0409.csv'
 
     # 데이터 로드
     df_IMC, df_refined = load_data(imc_path, refined_path)
-    group_number = selected_category
+    
+    # CSV 파일은 DataFrame 형태이므로, 컬럼명을 기존 pickle 파일과 동일하게 맞춥니다.
+    # translated_category_recommendations_0409.csv의 컬럼은:
+    # "categoryID", "translated_keyword", "score"
+    # refined_recommendations_0409.csv의 컬럼은:
+    # "category", "original_text", "refined_text"
+    # 여기서 이미지 키워드 추천 함수에서 사용할 컬럼명을 "category"와 "keyword"로 맞추겠습니다.
+    df_IMC.rename(columns={'categoryID': 'category', 'translated_keyword': 'keyword'}, inplace=True)
+    
+    # selected_category가 None이면 기본값(예: 첫 번째 카테고리)을 사용합니다.
+    if selected_category is None:
+        group_number = df_IMC['category'].iloc[0]
+    else:
+        group_number = selected_category
 
+    # 디버깅: 두 데이터셋에 있는 카테고리 값 확인
+    # st.write("IMC 데이터 카테고리:", sorted(df_IMC['category'].unique()))
+    # st.write("Refined 데이터 카테고리:", sorted(df_refined['category'].unique()))
+    
     # 썸네일 이미지 키워드 추천
     st.subheader("썸네일 이미지 키워드 추천")
     keywords_data = get_thumbnail_keywords(df_IMC, group_number, top_n=20)
 
     if keywords_data:
-        # 키워드 + point 여부 확인
+        # 키워드 데이터는 (키워드, point) 튜플 리스트여야 합니다.
         if isinstance(keywords_data[0], tuple):
             df_keywords = pd.DataFrame(keywords_data, columns=["키워드", "point"])
         else:
             df_keywords = pd.DataFrame(keywords_data, columns=["키워드"])
+        # 점수 계산: point * 100. 여기선 point 값 그대로 출력할 수도 있고, 필요에 따라 변환합니다.
         df_keywords["점수"] = (df_keywords["point"] * 100).round(1).astype(str)
         # 순위 추가
         df_keywords.index = df_keywords.index + 1
@@ -342,18 +396,14 @@ def display_thumbnail_recommendations(selected_category=None):
         df_keywords.rename(columns={"index": "순위"}, inplace=True)
 
         # 좌우 2컬럼으로 분할: 왼쪽은 표, 오른쪽은 그래프
-        col1, col2 = st.columns([1, 1.5])  # 오른쪽 비율 살짝 넓게
-
+        col1, col2 = st.columns([1, 1.5])
         with col1:
             st.dataframe(df_keywords[["순위", "키워드", "점수"]], hide_index=True, use_container_width=True)
-
         with col2:
             fig = plot_keyword_bar_chart(df_keywords)
             st.pyplot(fig)
-
     else:
         st.warning("해당 그룹의 이미지 추천 데이터가 없습니다.")
-
 
     # 썸네일 문구 추천 출력
     st.subheader("썸네일 문구 추천")
@@ -366,27 +416,3 @@ def display_thumbnail_recommendations(selected_category=None):
         st.dataframe(df_texts, hide_index=True)
     else:
         st.write("해당 그룹의 문구 추천 데이터가 없습니다.")
-
-    
-
-
-
-from font import get_font_path
-
-def plot_keyword_bar_chart(df_keywords):
-    df_plot = df_keywords.sort_values("순위", ascending=False)
-    n = len(df_plot)
-
-    # 그래프 세로 크기를 키워드 수에 따라 동적으로 조정
-    height_per_item = 0.15  # 한 항목당 0.4인치 높이
-    fig_height = max(4, n * height_per_item)  # 최소 높이 4인치
-
-    fig, ax = plt.subplots(figsize=(6, fig_height))
-    ax.barh(df_plot["키워드"], df_plot["point"], color="skyblue")
-    ax.set_xlabel("point")
-
-    for i, (score, label) in enumerate(zip(df_plot["point"], df_plot["키워드"])):
-        ax.text(score + 0.005, i, f"{score:.2f}", va='center')
-
-    plt.tight_layout()
-    return fig
