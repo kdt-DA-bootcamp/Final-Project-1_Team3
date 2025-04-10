@@ -376,104 +376,81 @@ def load_success_videos():
 def show_high_impact_videos():
     st.title("반짝 영상 분석")
     st.markdown("""
-    대형 채널이 아님에도 예상 조회수를 뛰어넘은 반짝 영상들을 카테고리별로 분석하여 키워드를 추출했습니다.  
+    대형 채널이 아님에도 예상 조회수를 뛰어넘은 반짝 영상들을 카테고리별로 분석하여 키워드를 추출했습니다.
     많이 등장한 키워드를 **워드 클라우드**로 시각화하여 한눈에 확인할 수 있습니다.
     """)
-
-    # 카테고리 선택
     category_map = {
         1: '엔터테인먼트', 2: '차량', 3: '여행&음식', 4: '게임', 5: '스포츠',
         6: '라이프', 7: '정치', 8: '반려동물', 9: '교육', 10: '과학/기술'
     }
-
-    # 카테고리 목록 추출
     categories = list(category_map.keys())
-    selected_category = st.selectbox("카테고리 선택", categories, format_func=lambda x: category_map.get(x, "알 수 없음"))
-
-    # 결과 불러오기
-    @st.cache_data
-    def load_results():
-        try:
-            with open("../data/underdog_results.pkl", "rb") as f:
-                return pickle.load(f)
-        except Exception as e:
-            st.error(f"파일을 불러오는 중 오류 발생: {e}")
-            return {}
-
-    results = load_results()
-
-    # 키워드 표시
+    selected_category = st.selectbox("카테고리 선택", categories,
+                                     format_func=lambda x: category_map.get(x, "알 수 없음"))
     selected_category_str = str(selected_category)
+    results = load_success_videos()
+    # 키워드 표시
     if selected_category_str in results:
-        bert_df = pd.DataFrame(results[selected_category_str]['bertopic_keywords'])
+        keyword_str = results[selected_category_str]['bertopic_keywords']
+        try:
+            keyword_data = ast.literal_eval(keyword_str)
+        except Exception as e:
+            st.error(f"키워드 데이터를 파싱하는 중 오류 발생: {e}")
+            return
+        bert_df = pd.DataFrame(keyword_data)
         if not bert_df.empty and 'keyword' in bert_df.columns and 'score' in bert_df.columns:
-            bert_df['score'] = (bert_df['score'] / bert_df['score'].max() * 100).round(2) 
+            bert_df['score'] = (bert_df['score'] / bert_df['score'].max() * 100).round(2)
             top_bert = bert_df.sort_values(by='score', ascending=False).head(15)
-            bert_keywords = ", ".join(top_bert['keyword'])
-
             with st.expander("키워드 점수표"):
                 st.dataframe(bert_df[['keyword', 'score']].sort_values(by='score', ascending=False)[:10])
-
             word_freq = dict(zip(bert_df['keyword'], bert_df['score']))
-
             wordcloud = WordCloud(
                 font_path=get_font_path(),
-                width=400, 
-                height=300, 
-                background_color='white', 
-                colormap='viridis', 
+                width=400,
+                height=300,
+                background_color='white',
+                colormap='viridis',
                 max_words=50
             ).generate_from_frequencies(word_freq)
-
-            # 시각화
             fig, ax = plt.subplots(figsize=(4, 3))
             ax.imshow(wordcloud, interpolation='bilinear')
             ax.axis("off")
             st.pyplot(fig, use_container_width=False)
-
         else:
             st.warning(f"카테고리 '{category_map.get(selected_category, '알 수 없음')}'에 대한 키워드 분석 결과가 없습니다. 반짝 영상들 간의 키워드 공통점이 존재하지 않습니다.")
     else:
         st.warning(f"카테고리 '{category_map.get(selected_category, '알 수 없음')}'에 대한 키워드 분석 결과가 포함되어 있지 않습니다.")
-
-    # 인기 영상 표시
+    # 인기 영상 표시 (이상치 데이터 처리; 필요 시 파싱 작업 포함)
     if selected_category_str in results:
-        outlier_df = pd.DataFrame(results[selected_category_str]['outliers'])
+        outlier_str = results[selected_category_str]['outliers']
+        try:
+            outlier_data = ast.literal_eval(outlier_str)
+        except Exception as e:
+            st.error(f"이상치 데이터를 파싱하는 중 오류 발생: {e}")
+            return
+        outlier_df = pd.DataFrame(outlier_data)
         if not outlier_df.empty:
             outlier_df = outlier_df.sort_values(by='gap', ascending=False)
-
             st.markdown("---")
             st.subheader(f"예측보다 높은 조회수를 기록한 영상들 ({category_map[selected_category]})")
-
             for _, row in outlier_df.head(10).iterrows():
                 upload_date = pd.to_datetime(row['uploadDate']).strftime('%Y-%m-%d')
                 gap_text = f"{int(row['gap']):,}회 더 조회됨"
                 subs_text = f"{int(row['subscriberCount']):,}명"
                 video_id = row['videoID']
                 thumbnail_url = row.get('thumbnailURL', '')
-
-                # 썸네일 URL이 없는 경우 기본 URL 사용
                 if not thumbnail_url:
                     thumbnail_url = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
-
-                # 영상 URL 생성
                 video_url = f"https://www.youtube.com/watch?v={video_id}"
-
-                # 썸네일을 클릭하면 유튜브 영상으로 이동
                 image_html = f'<a href="{video_url}" target="_blank"><img src="{thumbnail_url}" width="300"></a>'
-
-                # Streamlit에 표시
                 st.markdown(f"""
-                - **{row['title']}**  
+                - **{row['title']}**
                 예측 대비 **{gap_text}**, 업로드일: {upload_date}, 구독자 수: {subs_text}, 채널명: {row['channelTitle']}
                 """)
                 st.markdown(image_html, unsafe_allow_html=True)
-
         else:
             st.info(f"카테고리 '{category_map[selected_category]}'에 대한 이상치 영상이 없습니다.")
     else:
         st.error(f"카테고리 '{category_map[selected_category]}'에 대한 분석된 이상치 영상 데이터가 없습니다.")
-
 
 if __name__ == "__main__":
     main()
