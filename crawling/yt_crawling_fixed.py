@@ -2,6 +2,7 @@ import requests
 import isodate
 import os
 import re
+import csv
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 import pandas as pd
@@ -50,7 +51,7 @@ end_date = current_date_obj.isoformat()
 
 # 키워드 불러오기
 keywords_df = pd.read_csv("카테고리별 키워드 리스트.csv")
-keywords = keywords_df['keywords'].dropna().unique().tolist()
+keyword = keywords_df['keyword'].dropna().unique().tolist()
 
 def convert_duration_to_seconds(duration):
     try:
@@ -174,7 +175,7 @@ video_data = []
 channel_ids = set()
 seen_video_ids = set()
 
-print(f"\n⚡ 키워드 '{keyword}' 수집 중...")
+print(f"키워드 '{keyword}' 수집 중...")
 video_ids = search_video_ids_by_keyword(keyword)
 print(f" - 검색된 영상 수: {len(video_ids)}")
 if video_ids:
@@ -188,7 +189,7 @@ if video_ids:
         snippet = video.get("snippet", {})
         statistics = video.get("statistics", {})
         content_details = video.get("contentDetails", {})
-
+        category_id = snippet.get("categoryId", "N/A")
         channel_id = snippet.get("channelId", "")
         title = snippet.get("title", "")
         view_count = int(statistics.get("viewCount", "0"))
@@ -201,7 +202,7 @@ if video_ids:
 
         video_data.append([
             video_id, channel_id, title, view_count, like_count, comment_count,
-            upload_date, duration_sec, tags, thumbnail_url, keyword
+            upload_date, duration_sec, tags, thumbnail_url, category_id
         ])
         channel_ids.add(channel_id)
 
@@ -224,7 +225,7 @@ for channel in channels_details:
 # 저장 시 쉼표 이슈 방지 (모든 필드 큰따옴표 감싸기)
 df_videos = pd.DataFrame(video_data, columns=[
     "videoID", "channelID", "title", "viewCount", "likeCount", "commentCount",
-    "uploadDate", "duration", "tags", "thumbnailURL", "keyword"
+    "uploadDate", "duration", "tags", "thumbnailURL", "categoryID"
 ])
 df_videos.to_csv("videos_by_keyword.csv", index=False, encoding="utf-8-sig", quoting=csv.QUOTE_ALL)
 print("영상 데이터 저장 완료: videos_by_keyword.csv")
