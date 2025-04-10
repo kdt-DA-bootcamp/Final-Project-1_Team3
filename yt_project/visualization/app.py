@@ -263,9 +263,8 @@ def show_smart_recommendation():
         st.subheader("상위/하위 컬러 비율 비교 (상위 10개)")
         visualize_color_comparison(high_view_colors, low_view_colors)
 
-        view_mode = st.radio("시각화 방식 선택", ["파이차트", "색상 팔레트"])
         st.subheader("상위 컬러 Top 3 세부 색상 구성")
-        mode = "pie" if view_mode == "파이차트" else "palette"
+        mode = "palette"
         visualize_top3_detailed_colors(high_view_colors, mode)
 
     with tabs[1]:

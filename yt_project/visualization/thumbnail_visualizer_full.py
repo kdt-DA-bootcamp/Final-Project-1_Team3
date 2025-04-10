@@ -116,6 +116,9 @@ def load_color_data():
 
 # 시각화 함수: 상위/하위 컬러 비교 (상위 10개)
 def visualize_color_comparison(high_colors, low_colors):
+    font_path = os.path.join(os.path.dirname(__file__), 'fonts', 'NanumGothic.ttf')
+    font_prop = fm.FontProperties(fname=font_path)
+
     high_grouped = {}
     low_grouped = {}
 
@@ -185,9 +188,12 @@ def visualize_color_comparison(high_colors, low_colors):
 
     # 그래프 설정
     ax.set_xticks(x)
-    ax.set_xticklabels(top10_groups, rotation=45, ha='right')
-    ax.set_title("상위/하위 컬러 비율 비교 (상위 10개)")
-    ax.legend()
+    ax.set_xticklabels(top10_groups, rotation=45, ha='right', fontproperties=font_prop)
+    ax.set_title("상위/하위 컬러 비율 비교 (상위 10개)", fontproperties=font_prop)
+    ax.legend(prop=font_prop)
+
+    plt.yticks(fontproperties=font_prop)
+    plt.xticks(fontproperties=font_prop)
 
     st.pyplot(fig, use_container_width=False)
 
